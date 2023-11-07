@@ -213,32 +213,29 @@ void USART_init() {
     RCC->APB1ENR |= RCC_APB1ENR_USART2EN;
     USART2->BRR = MYBRR;
     USART2->CR1 |= (USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE);
-    //USART2->CR2 |= (USART_CR2_STOP_1);
     USART2->CR3 |= (USART_CR3_DMAR | USART_CR3_DMAT);
     USART2->CR1 |= USART_CR1_UE;
 }
 
 uint8_t usart2_mrk = 0x00;
-uint8_t usart2_rx_array[(2 * SIZE)];
-uint8_t usart2_tx_array[(2 * SIZE)];
+uint8_t usart2_rx_array[SIZE];
+uint8_t usart2_tx_array[SIZE];
 
 
 void DMA1_Stream6_IRQHandler(void) {  // TX
     if ((DMA1->HISR & DMA_HISR_TCIF6) == DMA_HISR_TCIF6) {
-        GPIOD->ODR ^= GPIO_ODR_OD12;
+        //GPIOD->ODR ^= GPIO_ODR_OD12;
         usart2_mrk = 0xA0;
         DMA1_Stream6->CR &= ~DMA_SxCR_EN;
-        //while ((DMA1_Stream6->CR) & DMA_SxCR_EN){;}
         DMA1->HIFCR |= DMA_HIFCR_CTCIF6;
     }
 }
 
 void DMA1_Stream5_IRQHandler(void) {  // RX
     if ((DMA1->HISR & DMA_HISR_TCIF5) == DMA_HISR_TCIF5) {
-        GPIOD->ODR ^= GPIO_ODR_OD13;
+        //GPIOD->ODR ^= GPIO_ODR_OD13;
         usart2_mrk = 0x0A;
         DMA1_Stream5->CR &= ~DMA_SxCR_EN;
-        while ((DMA1_Stream5->CR) & DMA_SxCR_EN){;}
         DMA1->HIFCR |= DMA_HIFCR_CTCIF5;
     }
 }
@@ -283,7 +280,6 @@ void DMA_init() {
     // 7. Настройка прерываний
     NVIC_EnableIRQ(DMA1_Stream6_IRQn);
     NVIC_SetPriority(DMA1_Stream6_IRQn, 5);
-
     NVIC_EnableIRQ(DMA1_Stream5_IRQn);
     NVIC_SetPriority(DMA1_Stream5_IRQn, 4);
 
@@ -291,23 +287,46 @@ void DMA_init() {
     DMA1_Stream5->CR |= DMA_SxCR_EN;
 }
 
-int main(void) {
+void USART2_init() {
     SystemCoreClockUpdate();
     GPIO_init();
     USART_init();
     DMA_init();
-    while(1) {
-        if (usart2_mrk == 0x0A) {
-            for (uint16_t i = 0; i < SIZE; i++)
-                usart2_tx_array[i] = (usart2_rx_array[i] + 1);
+}
 
-            usart2_mrk = 0x00;
-            DMA1_Stream6->CR |= DMA_SxCR_EN;
-        } 
-        if (usart2_mrk == 0xA0) {
-            usart2_mrk = 0x00;
-            DMA1_Stream5->CR |= DMA_SxCR_EN;
-        }
+void init() {
+    USART2_init();
+}
+
+void if_message_in() {
+    if (usart2_mrk == 0x0A) {
+        GPIOD->ODR |= GPIO_ODR_OD12;
+        for (uint16_t i = 0; i < SIZE; i++)
+            usart2_tx_array[i] = (usart2_rx_array[i] + 1);
+        usart2_mrk = 0x00;
+        DMA1_Stream6->CR |= DMA_SxCR_EN;
+        GPIOD->ODR &= ~GPIO_ODR_OD12;
+    } 
+}
+
+void if_message_out() {
+    if (usart2_mrk == 0xA0) {
+        GPIOD->ODR |= GPIO_ODR_OD13;
+        usart2_mrk = 0x00;
+        DMA1_Stream5->CR |= DMA_SxCR_EN;
+        GPIOD->ODR &= ~GPIO_ODR_OD13;
+    }
+}
+
+void loop() {
+    if_message_in();
+    if_message_out();
+}
+
+int main(void) {
+    init();
+    while(1) {
+        loop(); 
     }
 }
 
